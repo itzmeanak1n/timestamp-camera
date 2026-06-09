@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Burst Timestamp Camera (Preview & Compact Cam)</title>
+    <title>Burst Timestamp Camera (4:3 Standard)</title>
     <style>
         :root {
             --primary: #007aff;
@@ -37,15 +37,15 @@
             max-width: 650px;
         }
 
-        /* ✅ ย่อขนาดกล่องกล้องลง เพื่อให้ปุ่มขยับขึ้นมากดง่ายขึ้นบนมือถือ */
+        /* ✅ ปรับกล่องพรีวิวเป็น 4:3 และคงขนาดให้กะทัดรัด */
         .camera-container {
             position: relative;
             width: 95%;
-            max-width: 480px; /* ลดลงจากเดิม 650px */
+            max-width: 480px; 
             background: #000;
             border-radius: 16px;
             overflow: hidden;
-            aspect-ratio: 16 / 9;
+            aspect-ratio: 4 / 3; /* เปลี่ยนเป็น 4:3 */
             box-shadow: 0 8px 24px rgba(0,0,0,0.5);
         }
 
@@ -129,10 +129,10 @@
 
         .photo-card img {
             width: 100%;
-            aspect-ratio: 16 / 9;
+            aspect-ratio: 4 / 3; /* เปลี่ยนเป็น 4:3 */
             object-fit: cover;
             display: block;
-            cursor: zoom-in; /* เปลี่ยนเคอร์เซอร์ให้รู้ว่ากดดูได้ */
+            cursor: zoom-in; 
         }
 
         .card-buttons {
@@ -152,7 +152,7 @@
         .card-btn-del { color: var(--danger); border-left: 1px solid #2c2c2e; }
         .card-btn:hover { background: #2c2c2e; }
 
-        /* ✅ ระบบ Modal สำหรับแสดงรูปขยายเต็มจอ */
+        /* Modal สำหรับดูรูปเต็มจอ */
         .modal {
             display: none;
             position: fixed;
@@ -205,7 +205,7 @@
 </head>
 <body>
 
-    <h1>📸 Burst Timestamp Cam (16:9)</h1>
+    <h1>📸 Burst Timestamp Cam (4:3)</h1>
     <div id="location-status">🛰️ กำลังตรวจสอบสิทธิ์และพิกัด...</div>
 
     <div class="camera-container" id="cam-box">
@@ -220,7 +220,7 @@
 
     <div class="gallery-container" id="gallery-section">
         <div class="gallery-header">
-            <h2>📦 รูปภาพแนวนอน 16:9 ในเครื่อง</h2>
+            <h2>📦 รูปภาพสัดส่วน 4:3 ในเครื่อง</h2>
             <div class="action-links">
                 <button id="dl-all-btn" class="btn-small btn-download-all">💾 โหลดทั้งหมด</button>
                 <button id="clear-all-btn" class="btn-small btn-clear-all">🗑️ ล้างคลัง</button>
@@ -252,7 +252,6 @@
         const dlAllBtn = document.getElementById('dl-all-btn');
         const clearAllBtn = document.getElementById('clear-all-btn');
         
-        // Modal Elements
         const modal = document.getElementById('image-modal');
         const previewImg = document.getElementById('preview-img');
         const closeModalBtn = document.getElementById('close-modal');
@@ -267,7 +266,7 @@
             locationStatus.innerText = "❌ เกิดข้อผิดพลาด: ไม่ใช่ระบบ HTTPS";
         }
 
-        const request = indexedDB.open("BurstCamPreviewDB", 1);
+        const request = indexedDB.open("BurstCam43DB", 1);
         request.onupgradeneeded = (e) => {
             db = e.target.result;
             db.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
@@ -326,12 +325,13 @@
                 activeStream.getTracks().forEach(track => track.stop());
             }
 
+            // ✅ บังคับสัดส่วน 4:3 (1920x1440)
             navigator.mediaDevices.getUserMedia({ 
                 video: { 
                     facingMode: "environment", 
                     width: { ideal: 1920 }, 
-                    height: { ideal: 1080 },
-                    aspectRatio: { ideal: 1.7777777778 }
+                    height: { ideal: 1440 },
+                    aspectRatio: { ideal: 4/3 }
                 }, 
                 audio: false 
             })
@@ -343,17 +343,22 @@
                 
                 const settings = stream.getVideoTracks()[0].getSettings();
                 const videoRatio = settings.width / settings.height;
-                const targetRatio = 16 / 9;
+                const targetRatio = 4 / 3;
                 
                 let canvasWidth = settings.width;
                 let canvasHeight = settings.height;
                 
                 if (Math.abs(videoRatio - targetRatio) > 0.05) {
-                    canvasWidth = canvasHeight * targetRatio;
+                    // ปรับครอปถ้ากล้องฮาร์ดแวร์ไม่รองรับ 4:3 แท้
+                    if (videoRatio > targetRatio) {
+                        canvasWidth = canvasHeight * targetRatio;
+                    } else {
+                        canvasHeight = canvasWidth / targetRatio;
+                    }
                 }
                 
                 canvas.width = Math.min(canvasWidth, 1920); 
-                canvas.height = Math.min(canvasHeight, 1080); 
+                canvas.height = Math.min(canvasHeight, 1440); 
             })
             .catch(err => { 
                 isCameraReady = false;
@@ -479,18 +484,15 @@
             };
         }
 
-        // ✅ ฟังก์ชันระบบ Modal พรีวิว
         window.openPreview = (imgSrc) => {
             previewImg.src = imgSrc;
             modal.classList.add('active');
         };
 
-        // ปิดรูปขยายเมื่อกดกากบาท
         closeModalBtn.addEventListener('click', () => {
             modal.classList.remove('active');
         });
 
-        // ปิดรูปขยายเมื่อกดพื้นที่ดำข้างนอก
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
                 modal.classList.remove('active');
