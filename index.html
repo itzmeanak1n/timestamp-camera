@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Burst Timestamp Camera (Fixed Watermark Position)</title>
+    <title>Burst Timestamp Camera (Time on Top)</title>
     <style>
         :root {
             --primary: #007aff;
@@ -388,17 +388,16 @@
 
                 const ts = getTimestampData();
 
-                // จัดเรียงลำดับแถว (ล่างสุดขึ้นบน)
-                const lines = [ts.text]; 
-                if (locData.subdistrict) lines.push(locData.subdistrict); 
-                if (locData.district) lines.push(locData.district);       
-                if (locData.province) lines.push(locData.province);       
+                // ✅ ปรับเรียงลำดับใหม่: จังหวัดอยู่ล่างสุด -> อำเภอ -> ตำบล -> เวลาอยู่บนสุด
+                const lines = []; 
+                if (locData.province) lines.push(locData.province);       // ล่างสุด
+                if (locData.district) lines.push(locData.district);       // แถวสอง (นับจากล่าง)
+                if (locData.subdistrict) lines.push(locData.subdistrict); // แถวสาม (นับจากล่าง)
+                lines.push(ts.text);                                      // บนสุด
 
                 const fontSize = Math.max(cH * 0.035, 24); 
                 ctx.font = `bold ${fontSize}px Helvetica, Arial, sans-serif`;
                 ctx.fillStyle = "#ffffff";
-                
-                // ✅ เปลี่ยนเป็นอิง 'left' เพื่อป้องกันบัคสระภาษาไทยของเบราว์เซอร์เอียงตกขอบขวา
                 ctx.textAlign = "left"; 
                 
                 ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
@@ -406,17 +405,16 @@
                 ctx.shadowOffsetX = 2;
                 ctx.shadowOffsetY = 2;
 
-                // ✅ เพิ่มขนาด Padding ขอบขวา (rightPadding) และขอบล่าง (ยกขึ้นมาอีกนิด) เพื่อให้ขยับเข้าเนื้อรูปภาพอย่างปลอดภัย
+                // กำหนดระยะห่างปลอดภัยขอบขวาและขอบล่าง
                 let currentY = cH - (fontSize * 1.3); 
                 const rightPadding = cW * 0.06;       
 
                 for (let i = 0; i < lines.length; i++) {
-                    // ✅ คำนวณหาความกว้างข้อความ แล้วถอยจุดเริ่มพิมพ์ไปทางซ้าย เพื่อจัดชิดขวาแบบร้อยเปอร์เซ็นต์
                     const textWidth = ctx.measureText(lines[i]).width;
                     const xPos = cW - rightPadding - textWidth;
                     
                     ctx.fillText(lines[i], xPos, currentY);
-                    currentY -= (fontSize * 1.4); 
+                    currentY -= (fontSize * 1.4); // ขยับขึ้นไปวาดบรรทัดถัดไป
                 }
 
                 ctx.shadowColor = "transparent";
