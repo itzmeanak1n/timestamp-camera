@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Burst Timestamp Camera (Fix Scale & Place)</title>
+    <title>Burst Timestamp Camera (16:9 Widescreen)</title>
     <style>
         :root {
             --primary: #007aff;
             --danger: #ff3b30;
             --success: #34c759;
+            --warning: #ff9500;
             --bg: #121212;
             --surface: #1e1e1e;
         }
@@ -33,39 +34,38 @@
             text-align: center;
             padding: 0 10px;
             width: 90%;
-            max-width: 500px;
+            max-width: 650px;
         }
 
         .camera-container {
             position: relative;
-            width: 100%;
-            max-width: 500px;
+            width: 95%;
+            max-width: 650px;
             background: #000;
             border-radius: 16px;
             overflow: hidden;
-            /* ✅ รักษาสัดส่วน 4/3 ของ container */
-            aspect-ratio: 4/3;
+            aspect-ratio: 16 / 9;
             box-shadow: 0 8px 24px rgba(0,0,0,0.5);
         }
 
         #video {
             width: 100%;
             height: 100%;
-            object-fit: cover; /* ✅ รักษาสัดส่วนวิดีโอใน container */
+            object-fit: cover;
         }
 
         .controls {
             margin: 20px 0;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             justify-content: center;
-            width: 90%;
-            max-width: 500px;
+            width: 95%;
+            max-width: 650px;
         }
 
         button {
-            padding: 14px 20px;
-            font-size: 1rem;
+            padding: 14px 16px;
+            font-size: 0.95rem;
             border: none;
             border-radius: 50px;
             cursor: pointer;
@@ -74,19 +74,20 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         button:active { transform: scale(0.95); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        #snap-btn { background-color: var(--danger); color: white; flex-grow: 2; font-size: 1.1rem; }
-        #gallery-btn { background-color: var(--primary); color: white; flex-grow: 1; }
+        #snap-btn { background-color: var(--danger); color: white; flex-grow: 3; font-size: 1.1rem; }
+        #gallery-btn { background-color: var(--primary); color: white; flex-grow: 2; }
+        #refresh-btn { background-color: var(--warning); color: white; flex-grow: 1; padding: 14px 14px; }
 
         .gallery-container {
             display: none;
-            width: 90%;
-            max-width: 600px;
+            width: 95%;
+            max-width: 650px;
             margin-top: 10px;
             border-top: 1px solid #333;
             padding-top: 20px;
@@ -111,7 +112,7 @@
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
             gap: 12px;
         }
 
@@ -127,8 +128,7 @@
 
         .photo-card img {
             width: 100%;
-            /* ✅ รักษาสัดส่วน 4/3 ในคลังภาพ */
-            aspect-ratio: 4/3;
+            aspect-ratio: 16 / 9;
             object-fit: cover;
             display: block;
         }
@@ -159,7 +159,7 @@
 </head>
 <body>
 
-    <h1>📸 Burst Timestamp Cam</h1>
+    <h1>📸 Burst Timestamp Cam (16:9)</h1>
     <div id="location-status">🛰️ กำลังตรวจสอบสิทธิ์และพิกัด...</div>
 
     <div class="camera-container" id="cam-box">
@@ -169,11 +169,12 @@
     <div class="controls">
         <button id="snap-btn" disabled>⚡ ถ่ายรูป (แชะ!)</button> 
         <button id="gallery-btn">🖼️ คลังรูป (<span id="count">0</span>)</button>
+        <button id="refresh-btn" title="รีเฟรชกล้องและพิกัด">🔄 รีเฟรช</button>
     </div>
 
     <div class="gallery-container" id="gallery-section">
         <div class="gallery-header">
-            <h2>📦 รูปภาพในเครื่องของคุณ</h2>
+            <h2>📦 รูปภาพแนวนอน 16:9 ในเครื่อง</h2>
             <div class="action-links">
                 <button id="dl-all-btn" class="btn-small btn-download-all">💾 โหลดทั้งหมด</button>
                 <button id="clear-all-btn" class="btn-small btn-clear-all">🗑️ ล้างคลัง</button>
@@ -189,6 +190,7 @@
         const canvas = document.getElementById('canvas');
         const snapBtn = document.getElementById('snap-btn');
         const galleryBtn = document.getElementById('gallery-btn');
+        const refreshBtn = document.getElementById('refresh-btn');
         const gallerySection = document.getElementById('gallery-section');
         const galleryGrid = document.getElementById('gallery-grid');
         const countSpan = document.getElementById('count');
@@ -199,17 +201,15 @@
 
         let db;
         let currentLocText = "กำลังคำนวณพิกัด...";
-        let rawLat, rawLon;
         let isCameraReady = false;
+        let activeStream = null;
 
-        // ✅ 1. ตรวจสอบความปลอดภัย HTTPS
         if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-            alert("⚠️ คำเตือน: เว็บแอปพลิเคชันต้องการความปลอดภัยระบบ HTTPS กรุณาเปิดผ่านลิงก์ที่เป็น https:// เท่านั้น ไม่เช่นนั้นกล้องจะไม่ทำงาน");
-            locationStatus.innerText = "❌ เกิดข้อผิดพลาด: ปฏิเสธการเข้าถึงเนื่องจากไม่ใช่ HTTPS";
+            alert("⚠️ แพลตฟอร์มต้องการความปลอดภัยระบบ HTTPS กรุณาเปิดผ่านลิงก์ https:// เท่านั้น");
+            locationStatus.innerText = "❌ เกิดข้อผิดพลาด: ไม่ใช่ระบบ HTTPS";
         }
 
-        // ✅ 2. เปิด IndexedDB
-        const request = indexedDB.open("BurstCamScaleFixDB", 1);
+        const request = indexedDB.open("BurstCam169RefreshDB", 1);
         request.onupgradeneeded = (e) => {
             db = e.target.result;
             db.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
@@ -219,14 +219,21 @@
             updatePhotoCount();
         };
 
-        // ✅ 3. เรียกดูพิกัดและแปลงเป็นชื่อสถานที่ (Reverse Geocoding)
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(
+        // ฟังก์ชันดึงตำแหน่งพิกัดและแปลงที่อยู่
+        function initLocation() {
+            if (!navigator.geolocation) {
+                currentLocText = "เบราว์เซอร์ไม่รองรับ GPS";
+                locationStatus.innerText = `⚠️ เตือน: เบราว์เซอร์ไม่รองรับระบบ GPS`;
+                return;
+            }
+
+            locationStatus.innerText = "🛰️ กำลังอัปเดตและค้นหาพิกัดที่ตั้งล่าสุด...";
+            
+            navigator.geolocation.getCurrentPosition(
                 async (position) => {
-                    rawLat = position.coords.latitude;
-                    rawLon = position.coords.longitude;
+                    const rawLat = position.coords.latitude;
+                    const rawLon = position.coords.longitude;
                     currentLocText = `${rawLat.toFixed(4)}, ${rawLon.toFixed(4)}`;
-                    locationStatus.innerText = `🛰️ ดึงพิกัดแล้ว: ${currentLocText} (กำลังแปลงเป็นชื่อสถานที่)`;
                     
                     try {
                         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${rawLat}&lon=${rawLon}&zoom=14&addressdetails=1`, {
@@ -240,71 +247,85 @@
                             const state = data.address.state || "";
                             
                             currentLocText = `${suburb} ${city} ${county} ${state}`.trim();
-                            
-                            // ถ้าได้ชื่อสถานที่จริง ให้แสดงและสลักลงบนรูป
-                            if (currentLocText.length > 0) {
-                                locationStatus.innerText = `📍 ที่อยู่: ${currentLocText}`;
-                            } else {
-                                // ถ้าดึงชื่อไม่ได้ (เช่น อยู่กลางทะเล) ให้ใช้พิกัดทศนิยมเดิม
-                                currentLocText = `${rawLat.toFixed(4)}, ${rawLon.toFixed(4)}`;
-                                locationStatus.innerText = `🛰️ ดึงพิกัดแล้ว (แต่ระบุที่อยู่ไม่ได้): ${currentLocText}`;
-                            }
+                            locationStatus.innerText = currentLocText.length > 0 ? `📍 ที่อยู่: ${currentLocText}` : `🛰️ พิกัดปัจจุบัน: ${rawLat.toFixed(4)}, ${rawLon.toFixed(4)}`;
                         }
                     } catch (e) {
-                        // ถ้าดึงชื่อสถานที่ไม่ได้ ให้ใช้พิกัดทศนิยมเดิม
-                        currentLocText = `${rawLat.toFixed(4)}, ${rawLon.toFixed(4)}`;
-                        locationStatus.innerText = `🛰️ ดึงพิกัดแล้ว: ${currentLocText}`;
+                        locationStatus.innerText = `🛰️ พิกัดปัจจุบัน: ${currentLocText}`;
                     }
                 },
                 (err) => {
-                    // ถ้าดึงพิกัดไม่ได้เลย
                     currentLocText = "ระบุพิกัดไม่ได้";
-                    locationStatus.innerText = `⚠️ เตือน: ไม่สามารถเข้าถึงตำแหน่งพิกัดได้ (รูปถ่ายจะแสดงเฉพาะวันเวลา)`;
+                    locationStatus.innerText = `⚠️ ไม่สามารถเข้าถึงตำแหน่งพิกัดได้ (รูปถ่ายจะแสดงเฉพาะวันเวลา)`;
                 },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+                { enableHighAccuracy: true, timeout: 10000 }
             );
-        } else {
-            currentLocText = "เบราว์เซอร์ไม่รองรับ GPS";
-            locationStatus.innerText = `⚠️ เตือน: เบราว์เซอร์ไม่รองรับระบบ GPS`;
         }
 
-        // ✅ 4. เปิดกล้อง (ปรับปรุงตัวดักจับสถานะ)
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false })
+        // ฟังก์ชันเริ่มทำงานหรือรีเซ็ตระบบกล้องใหม่
+        function initCamera() {
+            isCameraReady = false;
+            snapBtn.disabled = true;
+
+            // เคลียร์ Stream เก่าทิ้งก่อนเปิดใหม่
+            if (activeStream) {
+                activeStream.getTracks().forEach(track => track.stop());
+            }
+
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: "environment", 
+                    width: { ideal: 1920 }, 
+                    height: { ideal: 1080 },
+                    aspectRatio: { ideal: 1.7777777778 }
+                }, 
+                audio: false 
+            })
             .then(stream => { 
+                activeStream = stream;
                 video.srcObject = stream;
                 isCameraReady = true;
                 snapBtn.disabled = false;
                 
-                // ตั้งค่า Canvas ให้มีสัดส่วน 4/3 ของความละเอียดวิดีโอหลัก
                 const settings = stream.getVideoTracks()[0].getSettings();
                 const videoRatio = settings.width / settings.height;
-                const targetRatio = 4 / 3;
+                const targetRatio = 16 / 9;
                 
-                // กำหนดความละเอียดสูงสุดของรูปที่จะบันทึก (สูงสุด 1920x1440 หรือเท่าที่วิดีโอทำได้)
                 let canvasWidth = settings.width;
                 let canvasHeight = settings.height;
                 
-                if (videoRatio > targetRatio) {
-                    // วิดีโอกว้างกว่า 4/3 ให้ Crop ด้านข้าง
+                if (Math.abs(videoRatio - targetRatio) > 0.05) {
                     canvasWidth = canvasHeight * targetRatio;
-                } else if (videoRatio < targetRatio) {
-                    // วิดีโอแคบกว่า 4/3 ให้ Crop ด้านบน/ล่าง
-                    canvasHeight = canvasWidth / targetRatio;
                 }
                 
-                canvas.width = Math.min(canvasWidth, 1920); // จำกัดความกว้างสูงสุด
-                canvas.height = Math.min(canvasHeight, 1440); // จำกัดความสูงสูงสุด
-                
-                locationStatus.innerText = `📍 ที่อยู่: ${currentLocText}`;
+                canvas.width = Math.min(canvasWidth, 1920); 
+                canvas.height = Math.min(canvasHeight, 1080); 
             })
             .catch(err => { 
                 isCameraReady = false;
                 locationStatus.style.color = "red";
-                locationStatus.innerText = "❌ เปิดกล้องไม่สำเร็จ! กรุณากดรูปแม่กุญแจที่ URL เพื่อ 'อนุญาตสิทธิ์การเข้าถึงกล้องถ่ายรูป'";
-                alert("แอปเปิดกล้องไม่ได้: กรุณาตรวจสอบการอนุญาตสิทธิ์เข้าถึงกล้องถ่ายรูปใน Browser ของคุณ");
+                locationStatus.innerText = "❌ เปิดกล้องไม่สำเร็จ! กรุณาตรวจสอบสิทธิ์การใช้งานกล้องถ่ายรูป";
             });
+        }
 
-        // ✅ 5. ฟังก์ชันเวลาสากล AM/PM
+        // เริ่มระบบครั้งแรกเมื่อเปิดแอป
+        initLocation();
+        initCamera();
+
+        // ✅ กดปุ่มรีเฟรชระบบใหม่ (เรียกใช้ฟังก์ชันเดิมซ้ำโดยไม่ต้องโหลดหน้าเว็บ)
+        refreshBtn.addEventListener('click', () => {
+            // ทำเอฟเฟกต์หมุนปุ่มสั้นๆ หรือเปลี่ยนข้อความให้รู้ว่ากำลังทำงาน
+            refreshBtn.innerText = "⏳ รอ...";
+            refreshBtn.disabled = true;
+            
+            initLocation();
+            initCamera();
+            
+            setTimeout(() => {
+                refreshBtn.innerText = "🔄 รีเฟรช";
+                refreshBtn.disabled = false;
+            }, 1000);
+        });
+
         function getTimestamp() {
             const now = new Date();
             const day = String(now.getDate()).padStart(2, '0');
@@ -324,17 +345,11 @@
             };
         }
 
-        // ✅ 6. กดถ่ายรูป (แก้สเกลภาพยืด)
         snapBtn.addEventListener('click', () => {
-            if(!isCameraReady) {
-                alert("ระบบกล้องยังไม่พร้อมใช้งานชั่วคราว");
-                return;
-            }
-
+            if(!isCameraReady) return;
             const ctx = canvas.getContext('2d');
             
             try {
-                // ✅ แก้สเกลภาพยืด: Center Crop วิดีโอลงใน Canvas แบบอัตโนมัติ
                 const settings = video.srcObject.getVideoTracks()[0].getSettings();
                 const vW = settings.width;
                 const vH = settings.height;
@@ -350,22 +365,18 @@
                 const ts = getTimestamp();
                 const stampText = `${ts.full} | ${currentLocText}`;
 
-                // ดีไซน์แถบสีดำโปร่งแสงด้านล่างรูปภาพ
                 ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
-                const stampBarHeight = cH * 0.08; // แถบ Timestamp สูง 8% ของความสูงภาพ
+                const stampBarHeight = cH * 0.08; 
                 ctx.fillRect(0, cH - stampBarHeight, cW, stampBarHeight);
 
-                // ใส่ข้อความ Timestamp
                 ctx.fillStyle = "#ffffff";
-                const fontSize = cH * 0.025; // ขนาดตัวอักษร 2.5% ของความสูงภาพ
+                const fontSize = cH * 0.028; 
                 ctx.font = `bold ${fontSize}px Helvetica, Arial, sans-serif`;
                 ctx.textAlign = "left";
-                ctx.fillText(stampText, cW * 0.02, cH - (stampBarHeight * 0.4)); // จัดวางข้อความ
+                ctx.fillText(stampText, cW * 0.02, cH - (stampBarHeight * 0.38));
 
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
-                // เซฟลงฐานข้อมูลในเครื่อง
-                if(!db) { alert("ฐานข้อมูลชั่วคราวเต็มหรือไม่พร้อมใช้งาน"); return; }
                 const transaction = db.transaction(["photos"], "readwrite");
                 transaction.objectStore("photos").add({ image: dataUrl, filename: `IMG_${ts.file}.jpg` });
 
@@ -373,16 +384,14 @@
                     updatePhotoCount();
                     if (gallerySection.classList.contains('active')) loadGallery();
                     
-                    // เอฟเฟกต์แฟลชหน้าจอ
                     camBox.classList.add('flash');
                     setTimeout(() => camBox.classList.remove('flash'), 150);
                 };
             } catch (error) {
-                alert("ไม่สามารถสร้างรูปภาพได้: " + error.message);
+                alert("เกิดข้อผิดพลาดในการบันทึกภาพ: " + error.message);
             }
         });
 
-        // ✅ 7. ควบคุม อัลบั้ม
         galleryBtn.addEventListener('click', () => {
             gallerySection.classList.toggle('active');
             if (gallerySection.classList.contains('active')) loadGallery();
@@ -394,7 +403,6 @@
             request.onsuccess = () => { countSpan.innerText = request.result; };
         }
 
-        // ✅ 8. ดึงรูปจาก Cache มาโชว์พร้อมปุ่มจัดการ
         function loadGallery() {
             galleryGrid.innerHTML = "";
             if(!db) return;
@@ -440,13 +448,13 @@
                 const cursor = e.target.result;
                 if (cursor) {
                     downloadSingle(cursor.value.image, cursor.value.filename);
-                    setTimeout(() => { cursor.continue(); }, 100);
+                    setTimeout(() => { cursor.continue(); }, 120);
                 }
             };
         });
 
         clearAllBtn.addEventListener('click', () => {
-            if (confirm("คุณแน่ใจใช่ไหมว่าต้องการลบรูปภาพทั้งหมดในคลังแคชนี้?")) {
+            if (confirm("ต้องการเคลียร์ล้างคลังรูปทั้งหมดใช่ไหม?")) {
                 const transaction = db.transaction(["photos"], "readwrite");
                 transaction.objectStore("photos").clear();
                 transaction.onsuccess = () => {
