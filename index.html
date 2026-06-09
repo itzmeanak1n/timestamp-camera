@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Burst Timestamp Camera</title>
+    <style>
+        :root {
+            --primary: #007aff;
+            --danger: #ff3b30;
+            --success: #34c759;
+            --bg: #121212;
+            --surface: #1e1e1e;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { margin: 15px 0 5px 0; font-size: 1.4rem; font-weight: 600; }
+        
+        #location-status {
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-bottom: 15px;
+            text-align: center;
+            padding: 0 10px;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            aspect-ratio: 4/3;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            width: 90%;
+            max-width: 500px;
+        }
+
+        button {
+            padding: 14px 20px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.1s, opacity 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        button:active { transform: scale(0.95); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        #snap-btn { background-color: var(--danger); color: white; flex-grow: 2; font-size: 1.1rem; }
+        #gallery-btn { background-color: var(--primary); color: white; flex-grow: 1; }
+
+        /* Album Section */
+        .gallery-container {
+            display: none;
+            width: 90%;
+            max-width: 600px;
+            margin-top: 10px;
+            border-top: 1px solid #333;
+            padding-top: 20px;
+            padding-bottom: 50px;
+        }
+
+        .gallery-container.active { display: block; }
+        
+        .gallery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .gallery-header h2 { margin: 0; font-size: 1.2rem; }
+        
+        .action-links { display: flex; gap: 10px; }
+        .btn-small { padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; }
+        .btn-download-all { background: var(--success); color: white; }
+        .btn-clear-all { background: #444; color: #ff453a; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 12px;
+        }
+
+        .photo-card {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--surface);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .photo-card img {
+            width: 100%;
+            aspect-ratio: 4/3;
+            object-fit: cover;
+            display: block;
+        }
+
+        .card-buttons {
+            display: flex;
+            border-top: 1px solid #2c2c2e;
+        }
+
+        .card-btn {
+            flex: 1;
+            padding: 8px 0;
+            font-size: 0.75rem;
+            border-radius: 0;
+            background: transparent;
+            color: #fff;
+        }
+        .card-btn-dl { color: var(--success); }
+        .card-btn-del { color: var(--danger); border-left: 1px solid #2c2c2e; }
+        .card-btn:hover { background: #2c2c2e; }
+
+        /* Flash Animation */
+        .flash { animation: flashEffect 0.15s ease-out; }
+        @keyframes flashEffect {
+            0% { opacity: 0.3; background-color: #fff; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>📸 Burst Timestamp Cam</h1>
+    <div id="location-status">🛰️ กำลังขอสิทธิ์และค้นหาตำแหน่ง...</div>
+
+    <div class="camera-container" id="cam-box">
+        <video id="video" autoplay playsinline></video>
+    </div>
+
+    <div class="controls">
+        <button id="snap-btn">⚡ ถ่ายรูป (แชะ!)</button> 
+        <button id="gallery-btn">🖼️ คลังรูป (<span id="count">0</span>)</button>
+    </div>
+
+    <div class="gallery-container" id="gallery-section">
+        <div class="gallery-header">
+            <h2>📦 รูปภาพในเครื่องของคุณ</h2>
+            <div class="action-links">
+                <button id="dl-all-btn" class="btn-small btn-download-all">💾 โหลดทั้งหมด</button>
+                <button id="clear-all-btn" class="btn-small btn-clear-all">🗑️ ล้างคลัง</button>
+            </div>
+        </div>
+        <div class="grid" id="gallery-grid"></div>
+    </div>
+
+    <canvas id="canvas" style="display:none;" width="1280" height="960"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const snapBtn = document.getElementById('snap-btn');
+        const galleryBtn = document.getElementById('gallery-btn');
+        const gallerySection = document.getElementById('gallery-section');
+        const galleryGrid = document.getElementById('gallery-grid');
+        const countSpan = document.getElementById('count');
+        const locationStatus = document.getElementById('location-status');
+        const camBox = document.getElementById('cam-box');
+        const dlAllBtn = document.getElementById('dl-all-btn');
+        const clearAllBtn = document.getElementById('clear-all-btn');
+
+        let db;
+        let currentLocText = "กำลังคำนวณพิกัด...";
+
+        // 1. เปิด IndexedDB
+        const request = indexedDB.open("BurstCamProductionDB", 1);
+        request.onupgradeneeded = (e) => {
+            db = e.target.result;
+            db.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
+        };
+        request.onsuccess = (e) => {
+            db = e.target.result;
+            updatePhotoCount();
+        };
+
+        // 2. เรียกดูพิกัด + แอบแปลงเป็นชื่อย่าน/อำเภอเบื้องต้นด้วย OpenStreetMap API (ฟรี ไม่ต้องใช้คีย์)
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(
+                async (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    currentLocText = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                    locationStatus.innerText = `📍 พิกัดปัจจุบัน: ${currentLocText}`;
+                    
+                    try {
+                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&addressdetails=1`, {
+                            headers: { 'Accept-Language': 'th' }
+                        });
+                        const data = await res.json();
+                        if(data && data.address) {
+                            const suburb = data.address.suburb || data.address.neighborhood || "";
+                            const city = data.address.city || data.address.town || data.address.district || "";
+                            currentLocText = `${suburb} ${city} (${lat.toFixed(3)}, ${lon.toFixed(3)})`.trim();
+                            locationStatus.innerText = `📍 ที่อยู่: ${currentLocText}`;
+                        }
+                    } catch (e) {
+                        // ถ้าดึงชื่อสถานที่ไม่ได้ ให้ใช้พิกัดเลขแทน
+                    }
+                },
+                (err) => {
+                    currentLocText = "ระบุพิกัดไม่ได้";
+                    locationStatus.innerText = `⚠️ ไม่สามารถเข้าถึงตำแหน่งพิกัดได้`;
+                },
+                { enableHighAccuracy: true }
+            );
+        }
+
+        // 3. เปิดกล้อง
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => { locationStatus.innerText = "❌ กรุณาอนุญาตสิทธิ์การเข้าถึงกล้องถ่ายรูป"; });
+
+        // 4. ฟังก์ชันเวลาสากล AM/PM
+        function getTimestamp() {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            
+            let hours = now.getHours();
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const secs = String(now.getSeconds()).padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            
+            return {
+                full: `${day}/${month}/${year} ${String(hours).padStart(2, '0')}:${mins}:${secs} ${ampm}`,
+                file: `${day}-${month}-${year}_${hours}-${mins}${ampm}`
+            };
+        }
+
+        // 5. กดถ่ายรูป (Burst Shot)
+        snapBtn.addEventListener('click', () => {
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const ts = getTimestamp();
+            const stampText = `${ts.full} | ${currentLocText}`;
+
+            // ดีไซน์แถบสีดำโปร่งแสงด้านล่างรูปภาพ
+            ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+            ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+
+            // ใส่ข้อความ Timestamp
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 24px Helvetica, Arial, sans-serif";
+            ctx.textAlign = "left";
+            ctx.fillText(stampText, 30, canvas.height - 33);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+            // เซฟลงเบื้องหลังทันที
+            const transaction = db.transaction(["photos"], "readwrite");
+            transaction.objectStore("photos").add({ image: dataUrl, filename: `IMG_${ts.file}.jpg` });
+
+            transaction.onsuccess = () => {
+                updatePhotoCount();
+                if (gallerySection.classList.contains('active')) loadGallery();
+                
+                // เอฟเฟกต์แฟลชหน้าจอ
+                camBox.classList.add('flash');
+                setTimeout(() => camBox.classList.remove('flash'), 150);
+            };
+        });
+
+        // 6. ควบคุม อัลบั้ม
+        galleryBtn.addEventListener('click', () => {
+            gallerySection.classList.toggle('active');
+            if (gallerySection.classList.contains('active')) loadGallery();
+        });
+
+        function updatePhotoCount() {
+            if (!db) return;
+            const request = db.transaction(["photos"], "readonly").objectStore("photos").count();
+            request.onsuccess = () => { countSpan.innerText = request.result; };
+        }
+
+        // 7. ดึงรูปจาก Cache มาโชว์พร้อมปุ่มจัดการ
+        function loadGallery() {
+            galleryGrid.innerHTML = "";
+            db.transaction(["photos"], "readonly").objectStore("photos").openCursor().onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    const record = cursor.value;
+                    const id = record.id;
+
+                    const card = document.createElement('div');
+                    card.className = 'photo-card';
+                    card.innerHTML = `
+                        <img src="${record.image}">
+                        <div class="card-buttons">
+                            <button class="card-btn card-btn-dl" onclick="downloadSingle('${record.image}', '${record.filename}')">💾 โหลด</button>
+                            <button class="card-btn card-btn-del" onclick="deleteSingle(${id})">🗑️ ลบ</button>
+                        </div>
+                    `;
+                    galleryGrid.appendChild(card);
+                    cursor.continue();
+                }
+            };
+        }
+
+        // ฟังก์ชันช่วยดาวน์โหลดรูปเดี่ยว
+        window.downloadSingle = (url, name) => {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            a.click();
+        };
+
+        // ฟังก์ชันลบรูปเดี่ยว
+        window.deleteSingle = (id) => {
+            const transaction = db.transaction(["photos"], "readwrite");
+            transaction.objectStore("photos").delete(id);
+            transaction.onsuccess = () => {
+                updatePhotoCount();
+                loadGallery();
+            };
+        };
+
+        // 8. ดาวน์โหลดรูปทั้งหมดรวดเดียว
+        dlAllBtn.addEventListener('click', () => {
+            db.transaction(["photos"], "readonly").objectStore("photos").openCursor().onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    downloadSingle(cursor.value.image, cursor.value.filename);
+                    setTimeout(() => { cursor.continue(); }, 100); // ดีเลย์สั้นๆ ป้องกัน Browser บล็อกการโหลดรัว
+                }
+            };
+        });
+
+        // 9. ล้างคลังรูปทั้งหมด
+        clearAllBtn.addEventListener('click', () => {
+            if (confirm("คุณแน่ใจใช่ไหมว่าต้องการลบรูปภาพทั้งหมดในคลังแคชนี้?")) {
+                const transaction = db.transaction(["photos"], "readwrite");
+                transaction.objectStore("photos").clear();
+                transaction.onsuccess = () => {
+                    updatePhotoCount();
+                    loadGallery();
+                };
+            }
+        });
+    </script>
+</body>
+</html>
