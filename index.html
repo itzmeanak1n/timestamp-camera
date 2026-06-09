@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Burst Timestamp Camera (Clean Watermark)</title>
+    <title>Burst Timestamp Camera (Fixed Watermark Position)</title>
     <style>
         :root {
             --primary: #007aff;
@@ -151,7 +151,6 @@
         .card-btn-del { color: var(--danger); border-left: 1px solid #2c2c2e; }
         .card-btn:hover { background: #2c2c2e; }
 
-        /* Modal สำหรับดูรูปเต็มจอ */
         .modal {
             display: none;
             position: fixed;
@@ -167,32 +166,10 @@
             opacity: 0;
             transition: opacity 0.2s ease;
         }
-        .modal.active {
-            display: flex;
-            opacity: 1;
-        }
-        .modal-content {
-            position: relative;
-            max-width: 95vw;
-            max-height: 90vh;
-        }
-        .modal-content img {
-            width: 100%;
-            max-height: 90vh;
-            object-fit: contain;
-            border-radius: 8px;
-            box-shadow: 0 5px 25px rgba(0,0,0,0.5);
-        }
-        .close-modal {
-            position: absolute;
-            top: -40px;
-            right: 0;
-            color: #fff;
-            font-size: 35px;
-            font-weight: bold;
-            cursor: pointer;
-            z-index: 10000;
-        }
+        .modal.active { display: flex; opacity: 1; }
+        .modal-content { position: relative; max-width: 95vw; max-height: 90vh; }
+        .modal-content img { width: 100%; max-height: 90vh; object-fit: contain; border-radius: 8px; box-shadow: 0 5px 25px rgba(0,0,0,0.5); }
+        .close-modal { position: absolute; top: -40px; right: 0; color: #fff; font-size: 35px; font-weight: bold; cursor: pointer; z-index: 10000; }
         .close-modal:hover { color: var(--danger); }
 
         .flash { animation: flashEffect 0.15s ease-out; }
@@ -256,7 +233,6 @@
         const closeModalBtn = document.getElementById('close-modal');
 
         let db;
-        // เก็บข้อมูลสถานที่แยกเป็นส่วนๆ
         let locData = { subdistrict: "", district: "", province: "" };
         let isCameraReady = false;
         let activeStream = null;
@@ -265,7 +241,6 @@
             alert("⚠️ แพลตฟอร์มต้องการความปลอดภัยระบบ HTTPS");
         }
 
-        // ✅ เปลี่ยนชื่อฐานข้อมูลใหม่เพื่อเคลียร์บัคการลบข้อมูลอันเก่า
         const request = indexedDB.open("BurstCamFinalDB", 1);
         request.onupgradeneeded = (e) => {
             db = e.target.result;
@@ -297,7 +272,6 @@
                         
                         if(data && data.address) {
                             const addr = data.address;
-                            // ดึงข้อมูล ตำบล, อำเภอ, จังหวัด ตามลำดับของ OSM
                             locData.subdistrict = addr.suburb || addr.village || addr.quarter || addr.neighbourhood || "";
                             locData.district = addr.city_district || addr.district || addr.town || addr.county || "";
                             locData.province = addr.state || addr.province || addr.city || "";
@@ -359,7 +333,6 @@
             })
             .catch(err => { 
                 isCameraReady = false;
-                locationStatus.style.color = "red";
                 locationStatus.innerText = "❌ เปิดกล้องไม่สำเร็จ!";
             });
         }
@@ -378,7 +351,6 @@
             }, 1000);
         });
 
-        // ✅ ฟังก์ชันปรับแต่งเวลา (เอาวินาทีออก)
         function getTimestampData() {
             const now = new Date();
             const day = String(now.getDate()).padStart(2, '0');
@@ -412,38 +384,41 @@
                 const x = (vW * ratio - cW) / (2 * ratio);
                 const y = (vH * ratio - cH) / (2 * ratio);
                 
-                // วาดรูปถ่ายลงไป
                 ctx.drawImage(video, y, x, cW / ratio, cH / ratio, 0, 0, cW, cH);
 
                 const ts = getTimestampData();
 
-                // ✅ จัดเตรียมข้อความที่จะพิมพ์ (เรียงจากล่างขึ้นบนเพื่อให้ชิดขอบล่างเสมอ)
-                const lines = [ts.text]; // บรรทัดล่างสุดคือเวลา
-                if (locData.subdistrict) lines.push(locData.subdistrict); // ถัดมาคือตำบล
-                if (locData.district) lines.push(locData.district);       // ถัดมาคืออำเภอ
-                if (locData.province) lines.push(locData.province);       // บนสุดคือจังหวัด
+                // จัดเรียงลำดับแถว (ล่างสุดขึ้นบน)
+                const lines = [ts.text]; 
+                if (locData.subdistrict) lines.push(locData.subdistrict); 
+                if (locData.district) lines.push(locData.district);       
+                if (locData.province) lines.push(locData.province);       
 
-                // ✅ ตั้งค่าฟอนต์ สีขาว ไม่มีพื้นหลัง (ใส่ขอบเงาบางๆ เพื่อให้อ่านออกในพื้นหลังสว่าง)
-                const fontSize = Math.max(cH * 0.035, 18); 
+                const fontSize = Math.max(cH * 0.035, 24); 
                 ctx.font = `bold ${fontSize}px Helvetica, Arial, sans-serif`;
                 ctx.fillStyle = "#ffffff";
-                ctx.textAlign = "right";
                 
-                ctx.shadowColor = "rgba(0, 0, 0, 0.75)";
-                ctx.shadowBlur = 4;
+                // ✅ เปลี่ยนเป็นอิง 'left' เพื่อป้องกันบัคสระภาษาไทยของเบราว์เซอร์เอียงตกขอบขวา
+                ctx.textAlign = "left"; 
+                
+                ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+                ctx.shadowBlur = 6;
                 ctx.shadowOffsetX = 2;
                 ctx.shadowOffsetY = 2;
 
-                // ✅ คำนวณตำแหน่งและเริ่มพิมพ์ไล่จากบรรทัดล่างสุด ขึ้นไปด้านบน
-                let currentY = cH - (fontSize * 1.0); // ยกขึ้นจากขอบล่างเล็กน้อย
-                const rightPadding = cW * 0.03;       // เว้นระยะจากขอบขวาเล็กน้อย
+                // ✅ เพิ่มขนาด Padding ขอบขวา (rightPadding) และขอบล่าง (ยกขึ้นมาอีกนิด) เพื่อให้ขยับเข้าเนื้อรูปภาพอย่างปลอดภัย
+                let currentY = cH - (fontSize * 1.3); 
+                const rightPadding = cW * 0.06;       
 
                 for (let i = 0; i < lines.length; i++) {
-                    ctx.fillText(lines[i], cW - rightPadding, currentY);
-                    currentY -= (fontSize * 1.35); // ขยับพิกัดขึ้นไปพิมพ์บรรทัดถัดไป
+                    // ✅ คำนวณหาความกว้างข้อความ แล้วถอยจุดเริ่มพิมพ์ไปทางซ้าย เพื่อจัดชิดขวาแบบร้อยเปอร์เซ็นต์
+                    const textWidth = ctx.measureText(lines[i]).width;
+                    const xPos = cW - rightPadding - textWidth;
+                    
+                    ctx.fillText(lines[i], xPos, currentY);
+                    currentY -= (fontSize * 1.4); 
                 }
 
-                // รีเซ็ตเงากลับ
                 ctx.shadowColor = "transparent";
 
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
@@ -520,7 +495,6 @@
             a.click();
         };
 
-        // ✅ แก้ปัญหาปุ่มลบไม่ทำงาน โดยการบังคับแปลค่าให้เป็น Number
         window.deleteSingle = (id) => {
             const numericId = Number(id);
             const transaction = db.transaction(["photos"], "readwrite");
