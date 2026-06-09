@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Burst Timestamp Camera (4:3 Standard)</title>
+    <title>Burst Timestamp Camera (Clean Watermark)</title>
     <style>
         :root {
             --primary: #007aff;
@@ -37,7 +37,6 @@
             max-width: 650px;
         }
 
-        /* ✅ ปรับกล่องพรีวิวเป็น 4:3 และคงขนาดให้กะทัดรัด */
         .camera-container {
             position: relative;
             width: 95%;
@@ -45,7 +44,7 @@
             background: #000;
             border-radius: 16px;
             overflow: hidden;
-            aspect-ratio: 4 / 3; /* เปลี่ยนเป็น 4:3 */
+            aspect-ratio: 4 / 3;
             box-shadow: 0 8px 24px rgba(0,0,0,0.5);
         }
 
@@ -129,7 +128,7 @@
 
         .photo-card img {
             width: 100%;
-            aspect-ratio: 4 / 3; /* เปลี่ยนเป็น 4:3 */
+            aspect-ratio: 4 / 3;
             object-fit: cover;
             display: block;
             cursor: zoom-in; 
@@ -205,7 +204,7 @@
 </head>
 <body>
 
-    <h1>📸 Burst Timestamp Cam (4:3)</h1>
+    <h1>📸 Burst Timestamp Cam</h1>
     <div id="location-status">🛰️ กำลังตรวจสอบสิทธิ์และพิกัด...</div>
 
     <div class="camera-container" id="cam-box">
@@ -220,7 +219,7 @@
 
     <div class="gallery-container" id="gallery-section">
         <div class="gallery-header">
-            <h2>📦 รูปภาพสัดส่วน 4:3 ในเครื่อง</h2>
+            <h2>📦 รูปภาพในเครื่อง</h2>
             <div class="action-links">
                 <button id="dl-all-btn" class="btn-small btn-download-all">💾 โหลดทั้งหมด</button>
                 <button id="clear-all-btn" class="btn-small btn-clear-all">🗑️ ล้างคลัง</button>
@@ -257,16 +256,17 @@
         const closeModalBtn = document.getElementById('close-modal');
 
         let db;
-        let currentLocText = "กำลังคำนวณพิกัด...";
+        // เก็บข้อมูลสถานที่แยกเป็นส่วนๆ
+        let locData = { subdistrict: "", district: "", province: "" };
         let isCameraReady = false;
         let activeStream = null;
 
         if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-            alert("⚠️ แพลตฟอร์มต้องการความปลอดภัยระบบ HTTPS กรุณาเปิดผ่านลิงก์ https:// เท่านั้น");
-            locationStatus.innerText = "❌ เกิดข้อผิดพลาด: ไม่ใช่ระบบ HTTPS";
+            alert("⚠️ แพลตฟอร์มต้องการความปลอดภัยระบบ HTTPS");
         }
 
-        const request = indexedDB.open("BurstCam43DB", 1);
+        // ✅ เปลี่ยนชื่อฐานข้อมูลใหม่เพื่อเคลียร์บัคการลบข้อมูลอันเก่า
+        const request = indexedDB.open("BurstCamFinalDB", 1);
         request.onupgradeneeded = (e) => {
             db = e.target.result;
             db.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
@@ -278,40 +278,39 @@
 
         function initLocation() {
             if (!navigator.geolocation) {
-                currentLocText = "เบราว์เซอร์ไม่รองรับ GPS";
                 locationStatus.innerText = `⚠️ เตือน: เบราว์เซอร์ไม่รองรับระบบ GPS`;
                 return;
             }
 
-            locationStatus.innerText = "🛰️ กำลังอัปเดตและค้นหาพิกัดที่ตั้งล่าสุด...";
+            locationStatus.innerText = "🛰️ กำลังค้นหาพิกัดที่ตั้งล่าสุด...";
             
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
                     const rawLat = position.coords.latitude;
                     const rawLon = position.coords.longitude;
-                    currentLocText = `${rawLat.toFixed(4)}, ${rawLon.toFixed(4)}`;
                     
                     try {
                         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${rawLat}&lon=${rawLon}&zoom=14&addressdetails=1`, {
                             headers: { 'Accept-Language': 'th' }
                         });
                         const data = await res.json();
+                        
                         if(data && data.address) {
-                            const suburb = data.address.suburb || data.address.neighborhood || "";
-                            const city = data.address.city || data.address.town || data.address.district || "";
-                            const county = data.address.county || "";
-                            const state = data.address.state || "";
+                            const addr = data.address;
+                            // ดึงข้อมูล ตำบล, อำเภอ, จังหวัด ตามลำดับของ OSM
+                            locData.subdistrict = addr.suburb || addr.village || addr.quarter || addr.neighbourhood || "";
+                            locData.district = addr.city_district || addr.district || addr.town || addr.county || "";
+                            locData.province = addr.state || addr.province || addr.city || "";
                             
-                            currentLocText = `${suburb} ${city} ${county} ${state}`.trim();
-                            locationStatus.innerText = currentLocText.length > 0 ? `📍 ที่อยู่: ${currentLocText}` : `🛰️ พิกัดปัจจุบัน: ${rawLat.toFixed(4)}, ${rawLon.toFixed(4)}`;
+                            let showText = [locData.subdistrict, locData.district, locData.province].filter(Boolean).join(", ");
+                            locationStatus.innerText = showText ? `📍 ${showText}` : `🛰️ ${rawLat.toFixed(4)}, ${rawLon.toFixed(4)}`;
                         }
                     } catch (e) {
-                        locationStatus.innerText = `🛰️ พิกัดปัจจุบัน: ${currentLocText}`;
+                        locationStatus.innerText = `🛰️ พิกัดปัจจุบัน: ${rawLat.toFixed(4)}, ${rawLon.toFixed(4)}`;
                     }
                 },
                 (err) => {
-                    currentLocText = "ระบุพิกัดไม่ได้";
-                    locationStatus.innerText = `⚠️ ไม่สามารถเข้าถึงตำแหน่งพิกัดได้ (รูปถ่ายจะแสดงเฉพาะวันเวลา)`;
+                    locationStatus.innerText = `⚠️ ไม่สามารถเข้าถึงตำแหน่งพิกัดได้ (แสดงเฉพาะเวลา)`;
                 },
                 { enableHighAccuracy: true, timeout: 10000 }
             );
@@ -325,7 +324,6 @@
                 activeStream.getTracks().forEach(track => track.stop());
             }
 
-            // ✅ บังคับสัดส่วน 4:3 (1920x1440)
             navigator.mediaDevices.getUserMedia({ 
                 video: { 
                     facingMode: "environment", 
@@ -349,7 +347,6 @@
                 let canvasHeight = settings.height;
                 
                 if (Math.abs(videoRatio - targetRatio) > 0.05) {
-                    // ปรับครอปถ้ากล้องฮาร์ดแวร์ไม่รองรับ 4:3 แท้
                     if (videoRatio > targetRatio) {
                         canvasWidth = canvasHeight * targetRatio;
                     } else {
@@ -363,7 +360,7 @@
             .catch(err => { 
                 isCameraReady = false;
                 locationStatus.style.color = "red";
-                locationStatus.innerText = "❌ เปิดกล้องไม่สำเร็จ! กรุณาตรวจสอบสิทธิ์การใช้งานกล้องถ่ายรูป";
+                locationStatus.innerText = "❌ เปิดกล้องไม่สำเร็จ!";
             });
         }
 
@@ -373,17 +370,16 @@
         refreshBtn.addEventListener('click', () => {
             refreshBtn.innerText = "⏳ รอ...";
             refreshBtn.disabled = true;
-            
             initLocation();
             initCamera();
-            
             setTimeout(() => {
                 refreshBtn.innerText = "🔄 รีเฟรช";
                 refreshBtn.disabled = false;
             }, 1000);
         });
 
-        function getTimestamp() {
+        // ✅ ฟังก์ชันปรับแต่งเวลา (เอาวินาทีออก)
+        function getTimestampData() {
             const now = new Date();
             const day = String(now.getDate()).padStart(2, '0');
             const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -391,13 +387,12 @@
             
             let hours = now.getHours();
             const mins = String(now.getMinutes()).padStart(2, '0');
-            const secs = String(now.getSeconds()).padStart(2, '0');
             const ampm = hours >= 12 ? 'PM' : 'AM';
             hours = hours % 12;
             hours = hours ? hours : 12;
             
             return {
-                full: `${day}/${month}/${year} ${String(hours).padStart(2, '0')}:${mins}:${secs} ${ampm}`,
+                text: `${day}/${month}/${year} ${String(hours).padStart(2, '0')}:${mins} ${ampm}`,
                 file: `${day}-${month}-${year}_${hours}-${mins}${ampm}`
             };
         }
@@ -417,20 +412,39 @@
                 const x = (vW * ratio - cW) / (2 * ratio);
                 const y = (vH * ratio - cH) / (2 * ratio);
                 
+                // วาดรูปถ่ายลงไป
                 ctx.drawImage(video, y, x, cW / ratio, cH / ratio, 0, 0, cW, cH);
 
-                const ts = getTimestamp();
-                const stampText = `${ts.full} | ${currentLocText}`;
+                const ts = getTimestampData();
 
-                ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
-                const stampBarHeight = cH * 0.08; 
-                ctx.fillRect(0, cH - stampBarHeight, cW, stampBarHeight);
+                // ✅ จัดเตรียมข้อความที่จะพิมพ์ (เรียงจากล่างขึ้นบนเพื่อให้ชิดขอบล่างเสมอ)
+                const lines = [ts.text]; // บรรทัดล่างสุดคือเวลา
+                if (locData.subdistrict) lines.push(locData.subdistrict); // ถัดมาคือตำบล
+                if (locData.district) lines.push(locData.district);       // ถัดมาคืออำเภอ
+                if (locData.province) lines.push(locData.province);       // บนสุดคือจังหวัด
 
-                ctx.fillStyle = "#ffffff";
-                const fontSize = cH * 0.028; 
+                // ✅ ตั้งค่าฟอนต์ สีขาว ไม่มีพื้นหลัง (ใส่ขอบเงาบางๆ เพื่อให้อ่านออกในพื้นหลังสว่าง)
+                const fontSize = Math.max(cH * 0.035, 18); 
                 ctx.font = `bold ${fontSize}px Helvetica, Arial, sans-serif`;
-                ctx.textAlign = "left";
-                ctx.fillText(stampText, cW * 0.02, cH - (stampBarHeight * 0.38));
+                ctx.fillStyle = "#ffffff";
+                ctx.textAlign = "right";
+                
+                ctx.shadowColor = "rgba(0, 0, 0, 0.75)";
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+
+                // ✅ คำนวณตำแหน่งและเริ่มพิมพ์ไล่จากบรรทัดล่างสุด ขึ้นไปด้านบน
+                let currentY = cH - (fontSize * 1.0); // ยกขึ้นจากขอบล่างเล็กน้อย
+                const rightPadding = cW * 0.03;       // เว้นระยะจากขอบขวาเล็กน้อย
+
+                for (let i = 0; i < lines.length; i++) {
+                    ctx.fillText(lines[i], cW - rightPadding, currentY);
+                    currentY -= (fontSize * 1.35); // ขยับพิกัดขึ้นไปพิมพ์บรรทัดถัดไป
+                }
+
+                // รีเซ็ตเงากลับ
+                ctx.shadowColor = "transparent";
 
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
@@ -506,10 +520,13 @@
             a.click();
         };
 
+        // ✅ แก้ปัญหาปุ่มลบไม่ทำงาน โดยการบังคับแปลค่าให้เป็น Number
         window.deleteSingle = (id) => {
+            const numericId = Number(id);
             const transaction = db.transaction(["photos"], "readwrite");
-            transaction.objectStore("photos").delete(id);
-            transaction.onsuccess = () => {
+            const request = transaction.objectStore("photos").delete(numericId);
+            
+            request.onsuccess = () => {
                 updatePhotoCount();
                 loadGallery();
             };
